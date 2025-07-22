@@ -16,7 +16,7 @@ const Dashboard = () => {
     try{
       setLoading(true);
       const {data} = await axios.get('api/user/get-user-creations', {
-        Headers: {Authorizatino: `Bearer ${
+        headers: {Authorization: `Bearer ${
           await getToken()
         }`}
       })
@@ -26,14 +26,14 @@ const Dashboard = () => {
         toast.error(data.message);
       }
     } catch(error){
-      toast.error(error.mesage);
+      toast.error(error.message);
     }
     setLoading(false);
   };
 
   useEffect(() => {
     getDashbaordData();
-  });
+  }, []);
 
   return (
     <div className="h-full overflow-y-scroll p-6 ">

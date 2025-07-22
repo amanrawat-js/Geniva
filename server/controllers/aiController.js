@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import FormData from 'form-data';
 import OpenAI from "openai";
 import sql from "../config/db.js";
 import { clerkClient } from "@clerk/express";
@@ -124,18 +125,23 @@ export const generateImage = async (req, res) => {
 
     const form = new FormData();
     form.append("prompt", prompt);
-    const {data} = await axios.post('https://clipdrop-api.co/text-to-image/v1', form ,{
-      headers:{ 'x-api-key': process.env.CLIPDROP_API_KEY},
-      responseType: "arraybuffer",
-    })
-    const based64Image = `data:image/png;base64${Buffer.from(data, 'binary').toString('base64')}`;
 
-    const {secure_url} = await cloudinary.uploader.upload(based64Image);
+    const headers = form.getHeaders();
+    headers['x-api-key'] = process.env.CLIPDROP_API_KEY;
+
+    const { data } = await axios.post('https://clipdrop-api.co/text-to-image/v1', form, {
+      headers,
+      responseType: "arraybuffer",
+    });
+
+    const base64Image = `data:image/png;base64,${Buffer.from(data, 'binary').toString('base64')}`;
+
+    const { secure_url } = await cloudinary.uploader.upload(base64Image);
 
     await sql`INSERT INTO creations (user_id, prompt, content, type, publish) 
-    VALUES(${userId}, ${prompt}, ${secure_url}, 'image', ${publish ?? false})`;
+      VALUES(${userId}, ${prompt}, ${secure_url}, 'image', ${publish ?? false})`;
 
-    if (plan !== "premium") {
+         if (plan !== "premium") {
       await clerkClient.users.updateUserMetadata(userId, {
         privateMetadata: {
           free_usage: free_usage + 1,
@@ -148,13 +154,54 @@ export const generateImage = async (req, res) => {
       content: secure_url
     });
   } catch (error) {
-    console.log(error.message);
+    console.log('generateImage error:', error.response?.data || error.message);
     res.json({
       success: false,
-      message: error.message,
+      message: error.response?.data?.error || error.message,
     });
   }
 };
+
+// export const generateImage = async (req, res) => {
+//   try {
+//     const { userId } = req.auth();
+//     const { prompt, publish } = req.body;
+//     const plan = req.plan;
+
+//     if (plan !== "premium") {
+//       return res.json({
+//         success: false,
+//         message: "Only available for Premium Users, Upgrade to Premium",
+//       });
+//     }
+
+//     const form = new FormData();
+//     form.append("prompt", prompt);
+//     const {data} = await axios.post('https://clipdrop-api.co/text-to-image/v1', form ,{
+//       headers:{ 'x-api-key': process.env.CLIPDROP_API_KEY},
+//       responseType: "arraybuffer",
+//     })
+//     const base64Image = `data:image/png;base64,${Buffer.from(data, 'binary').toString('base64')}`;
+
+//     const {secure_url} = await cloudinary.uploader.upload(base64Image);
+
+//     await sql`INSERT INTO creations (user_id, prompt, content, type, publish) 
+//     VALUES(${userId}, ${prompt}, ${secure_url}, 'image', ${publish ?? false})`;
+
+ 
+
+//     res.json({
+//       success: true,
+//       content: secure_url
+//     });
+//   } catch (error) {
+//     console.log(error.message);
+//     res.json({
+//       success: false,
+//       message: error.message,
+//     });
+//   }
+// };
 
 export const removeImageBackground = async (req, res) => {
   try {
@@ -221,7 +268,7 @@ export const removeImageObject = async (req, res) => {
     })
 
     await sql`INSERT INTO creations (user_id, prompt, content, type) 
-    VALUES(${userId}, ${`Remove ${object} from image`} ${imageUrl}, 'image')`;
+    VALUES(${userId}, ${`Remove ${object} from image`}, ${imageUrl}, 'image')`
 
     if (plan !== "premium") {
       await clerkClient.users.updateUserMetadata(userId, {
@@ -230,10 +277,9 @@ export const removeImageObject = async (req, res) => {
         },
       });
     }
-
     res.json({
       success: true,
-      content: secure_url
+      content: imageUrl
     });
   } catch (error) {
     console.log(error.message);
